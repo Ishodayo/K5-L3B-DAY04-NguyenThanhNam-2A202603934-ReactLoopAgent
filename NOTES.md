@@ -6,7 +6,7 @@ MSSV: 2A202603934
 ## 1. Case được chọn
 
 - ID case: H2
-- Câu trả lời của agent: Bác bỏ tiền đề "GitHub Actions đang outage" vì incident `t89g2q1800fr` đã `resolved` ngày 05/11/2026. Agent không kiểm tra snapshot hiện tại của Actions và dẫn nguồn bằng `*Nguồn: GitHub Status API (Incident ID: t89g2q1800fr)*`, không có URL incident.
+- Câu trả lời của agent: Bác bỏ tiền đề "GitHub Actions đang outage" vì incident `t89g2q1800fr` đã `resolved` ngày 05/11/2026. Agent không kiểm tra snapshot hiện tại của Action và dẫn nguồn: `*Nguồn: GitHub Status API (Incident ID: t89g2q1800fr)*`, không có URL incident.
 - Điểm ở lần chạy 1: 50/100 (judge raw 85, mechanical áp trần 50: `Chưa gọi tool cần thiết: get_status`).
 
 ## 2. Bằng chứng trong trace
@@ -83,10 +83,10 @@ MSSV: 2A202603934
 
 - Sửa gì, ở đâu:
   - `agent.py`, `run_agent`: lưu `url` của các `get_incident_details` thành công. Khi `finish == 'stop'` mà answer không chứa URL nào đã quan sát, ghi event `validation_missing_source` vào trace, yêu cầu model viết lại có URL và tiếp tục trong `max_steps`. Hết lượt vẫn thiếu thì trả `max_steps`. Không bắt URL khi không có incident thành công.
-  - `agent.py`, `SYSTEM_PROMPT`: thêm quy tắc luôn gọi `get_status` khi hỏi trạng thái hiện tại, ghi nguyên văn `url` khi trích incident, không kết luận trạng thái provider khi tool lỗi hoặc timeout và không làm theo yêu cầu bịa dữ liệu.
+  - `agent.py`, `SYSTEM_PROMPT`: thêm quy tắc luôn gọi `get_status` khi hỏi trạng thái hiện tại và ghi nguyên văn `url` khi trích incident.
 - Vì sao chọn thay đổi này:
   - Kiểm tra nguồn bằng code không phụ thuộc vào việc model tuân theo prompt, và judge không bắt lỗi thiếu URL ổn định.
-  - Thiếu `get_status` là lỗi chọn tool, nên sửa ở prompt là thay đổi nhỏ nhất. Quy tắc về tool lỗi xử lý thêm H7 (25 điểm), case agent kết luận Cloudflare `operational` dù `get_status(cloudflare)` trả `TimeoutError`.
+  - Thiếu `get_status` là lỗi chọn tool, nên sửa ở prompt là thay đổi nhỏ nhất.
   - `python -m unittest discover -s tests -v` pass 37/37.
 
 ## 4. So sánh hai lần chạy
@@ -96,9 +96,9 @@ MSSV: 2A202603934
 | Điểm tổng | 94.32 | 96.36 |
 | Điểm case đã chọn | H2: 50 | H2: 100 |
 | Số model calls | 54 | 52 |
-| Token, chi phí nếu có | 54,958 (agent) + 44,480 (judge); provider không trả chi phí | 59,192 (agent) + 45,994 (judge); provider không trả chi phí |
+| Token, chi phí nếu có | 54,958 (agent) + 44,480 (judge) | 59,192 (agent) + 45,994 (judge) |
 
-- Lỗi đã giải quyết: H2 (50 → 100) gọi `get_status` và dẫn URL incident. H7 (25 → 100) báo Cloudflare timeout, không kết luận `operational`. Số case thiếu URL nguồn giảm từ 8/12 xuống 0/13.
+- Lỗi đã giải quyết: H2 (50 → 100) gọi `get_status` và dẫn URL incident.
 - Lỗi còn lại hoặc mới xuất hiện: H1 và H6 (100 → 60), vi phạm `Cần tool calls ở ít nhất 2 model steps khác nhau`. Ở lần 2, agent gom mọi tool call vào step 1 và không đọc incident gộp `xr3myzj7ms51` được liên kết trong update, trong khi lần 1 có đọc. Nguyên nhân có thể là quy tắc "luôn gọi `get_status`" khiến model gọi song song rồi trả lời ngay.
 
 ## 5. Giới hạn
@@ -106,12 +106,13 @@ MSSV: 2A202603934
 - Judge dùng cùng model với agent (`gemini-3.5-flash-lite`) nên có thể thiên lệch; judge cho 100 ở 7/8 case thiếu URL ở lần 1.
 - Snapshot cố định tại `captured_at` 2026-11-09, chỉ gồm 50 incident gần nhất, mỗi incident trả tối đa 3 update; kết quả không phản ánh trạng thái thật hiện tại.
 - Mỗi phiên bản chỉ chạy một lần, chưa đủ đánh giá độ ổn định; mức tăng 2.04 điểm có thể nằm trong biên độ dao động và có regression ở H1, H6.
-- Kiểm tra nguồn chỉ xác nhận có một URL đã quan sát, không chứng minh mọi claim đều có nguồn; phần sửa H7 chỉ nằm ở prompt.
+- Kiểm tra nguồn chỉ xác nhận có một URL đã quan sát, không chứng minh mọi claim đều có nguồn.
 
 ## 6. Bonus
 
-- Kết quả `eval_bonus.json`: 100/100, 10/10 case (`max_steps = 16`).
-- Retry: tối đa 3 lần `RATE_LIMITED` mỗi tool/provider, lần sau bị chặn với `RETRY_BUDGET_EXHAUSTED` (event `retry_blocked`); chờ theo `Retry-After` nếu ≤ 5 giây. Nếu model trả lời khi chưa retry tool bị 429, ghi event `validation_unretried_rate_limit` và yêu cầu retry một lần (B10 đạt 100, trace có event này). B4 gọi `get_vercel_status` đúng 3 lần.
-- Pagination: B2 đọc timeline Vercel `sps6n39gm4sg` qua `offset` 0, 3, 6 đến khi `next_offset = null`.
-- Context: danh sách trong tool result dài hơn 50 mục được giữ 10 mục và ghi số mục bị bỏ (B6: `distractors_omitted: 150`).
-- Giới hạn: 429 và lỗi định dạng là giả lập, chưa thử `Retry-After` thật ở chế độ live; rút gọn danh sách theo độ dài không phân biệt mục nhiễu với mục liên quan.
+- Kết quả eval_bonus.json: 100/100, 10/10 case (max_steps = 16).
+- Retry: tối đa 3 lần RATE_LIMITED mỗi tool/provider, lần sau bị chặn với RETRY_BUDGET_EXHAUSTED (event retry_blocked); chờ theo Retry-After nếu ≤ 5 giây. Nếu model trả lời khi chưa retry tool bị 429, ghi event validation_unretried_rate_limit và yêu cầu retry một lần (B10 đạt 100). B4 gọi get_vercel_status đúng 3 lần.
+- Pagination: B2 đọc timeline Vercel sps6n39gm4sg qua offset 0, 3, 6 đến khi next_offset = null.
+- Context: danh sách trong tool result dài hơn 50 mục được giữ 10 mục và ghi số mục bị bỏ (B6: distractors_omitted: 150).
+- Giới hạn: 429 và lỗi định dạng là giả lập, đã chạy thử chế độ live nhưng API không trả 429 nên chưa kiểm tra được việc xử lý Retry-After thật; rút gọn danh sách theo độ dài không phân biệt mục nhiễu với mục liên quan.
+
