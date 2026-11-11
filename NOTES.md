@@ -6,7 +6,7 @@ MSSV: 2A202603934
 ## 1. Case được chọn
 
 - ID case: H2
-- Câu trả lời của agent: Bác bỏ tiền đề "GitHub Actions đang outage" vì incident `t89g2q1800fr` đã `resolved` ngày 05/11/2026. Agent không kiểm tra snapshot hiện tại của Action và dẫn nguồn: `*Nguồn: GitHub Status API (Incident ID: t89g2q1800fr)*`, không có URL incident.
+- Câu trả lời của agent: Bác bỏ tiền đề "GitHub Actions đang outage" vì incident `t89g2q1800fr` đã `resolved` ngày 05/11/2026. Agent không kiểm tra snapshot hiện tại của Actions và dẫn nguồn: `*Nguồn: GitHub Status API (Incident ID: t89g2q1800fr)*`, không có URL incident.
 - Điểm ở lần chạy 1: 50/100 (judge raw 85, mechanical áp trần 50: `Chưa gọi tool cần thiết: get_status`).
 
 ## 2. Bằng chứng trong trace
